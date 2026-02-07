@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { AppState, UploadedFile, VectorCollection, ChunkingMethod, ChunkParams, SearchResult, Experiment, ProcessingStatus, ErrorInfo } from './types';
-import { Icons, CHUNKING_METHOD_LABELS } from './constants';
+import { Icons, CHUNKING_METHOD_LABELS, GEMINI_MODEL } from './constants';
 import { parseFile } from './services/fileParser';
 import { chunkText } from './services/chunkingService';
 import { generateEmbeddings, generateQueryEmbedding } from './services/embeddingService';
@@ -182,7 +182,8 @@ const App: React.FC = () => {
                 chunkMethod: method,
                 metadata: {}
               })),
-              vectors
+              vectors,
+              embeddingModel: GEMINI_MODEL
             };
 
             await saveCollection(collection);

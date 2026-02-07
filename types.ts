@@ -48,6 +48,7 @@ export interface VectorCollection {
   createdAt: string;
   chunks: Chunk[];
   vectors: number[][];
+  embeddingModel?: string;
 }
 
 export interface SearchResult {
@@ -56,6 +57,7 @@ export interface SearchResult {
   retrievalMethod: 'dense' | 'sparse' | 'hybrid';
   collectionName: string;
   collectionId: string;
+  embeddingModel?: string;
 }
 
 export interface Experiment {

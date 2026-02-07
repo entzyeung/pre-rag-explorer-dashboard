@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { VectorCollection, SearchResult, ChunkingMethod, ChunkParams } from '../../types';
 import { generateQueryEmbedding } from '../../services/embeddingService';
 import { cosineSimilarity, computeBM25 } from '../../utils/similarity';
-import { Icons, CHUNKING_METHOD_LABELS } from '../../constants';
+import { Icons, CHUNKING_METHOD_LABELS, GEMINI_MODEL } from '../../constants';
 import CopyButton from '../common/CopyButton';
 import { SAMPLE_PERSONAS, Persona, Question } from '../../data/sampleQuestions';
 import Papa from 'papaparse';
@@ -71,6 +71,7 @@ const SearchSection: React.FC<SearchSectionProps> = ({ collections, loading: app
         if (!col) continue;
 
         const docTexts = col.chunks.map(c => c.text);
+        const embeddingModel = col.embeddingModel || GEMINI_MODEL;
         
         // Retrieval Methods
         if (retrievalMethods.includes('dense')) {
@@ -81,7 +82,8 @@ const SearchSection: React.FC<SearchSectionProps> = ({ collections, loading: app
               score,
               retrievalMethod: 'dense',
               collectionName: col.name,
-              collectionId: col.id
+              collectionId: col.id,
+              embeddingModel
             });
           });
         }
@@ -95,7 +97,8 @@ const SearchSection: React.FC<SearchSectionProps> = ({ collections, loading: app
               score: s / max, 
               retrievalMethod: 'sparse',
               collectionName: col.name,
-              collectionId: col.id
+              collectionId: col.id,
+              embeddingModel
             });
           });
         }
@@ -113,7 +116,8 @@ const SearchSection: React.FC<SearchSectionProps> = ({ collections, loading: app
                     score: hybridScore,
                     retrievalMethod: 'hybrid',
                     collectionName: col.name,
-                    collectionId: col.id
+                    collectionId: col.id,
+                    embeddingModel
                 });
             });
         }
@@ -188,13 +192,6 @@ const SearchSection: React.FC<SearchSectionProps> = ({ collections, loading: app
     };
     reader.readAsText(file);
   };
-
-  // Group results by method
-  const groupedResults = results.reduce((acc, res) => {
-    if (!acc[res.retrievalMethod]) acc[res.retrievalMethod] = [];
-    acc[res.retrievalMethod].push(res);
-    return acc;
-  }, {} as Record<string, SearchResult[]>);
 
   const getScoreColor = (score: number) => {
     if (score >= 0.8) return 'bg-green-500';
@@ -404,24 +401,16 @@ const SearchSection: React.FC<SearchSectionProps> = ({ collections, loading: app
               </div>
             )}
 
-            {Object.entries(groupedResults).map(([method, methodResults]: [string, SearchResult[]]) => (
-              <div key={method} className="space-y-2">
-                 <div className="flex items-center gap-3 pb-2 border-b border-slate-100">
-                    <span className={`px-2 py-1 text-xs font-bold rounded uppercase tracking-wider border ${
-                        method === 'dense' ? 'bg-purple-50 text-purple-600 border-purple-100' :
-                        method === 'sparse' ? 'bg-orange-50 text-orange-600 border-orange-100' :
-                        'bg-teal-50 text-teal-600 border-teal-100'
-                      }`}>
-                      {method} Match
-                    </span>
-                    <span className="text-xs text-slate-400 font-medium">{methodResults.length} results</span>
-                 </div>
-                 
-                 {methodResults.map((res, i) => (
-                   <ResultRow key={`${res.collectionId}-${res.chunk.id}-${i}`} result={res} rank={i+1} scoreColor={getScoreColor(res.score)} />
+            <div className="space-y-2">
+                 {results.map((res, i) => (
+                   <ResultRow 
+                    key={`${res.collectionId}-${res.chunk.id}-${res.retrievalMethod}-${i}`} 
+                    result={res} 
+                    rank={i+1} 
+                    scoreColor={getScoreColor(res.score)} 
+                   />
                  ))}
-              </div>
-            ))}
+            </div>
 
             {results.length === 0 && !searching && query && (
               <div className="text-center py-16 bg-white rounded-2xl border border-slate-100 shadow-sm">
@@ -453,6 +442,15 @@ const SearchSection: React.FC<SearchSectionProps> = ({ collections, loading: app
 const ResultRow: React.FC<{ result: SearchResult, rank: number, scoreColor: string }> = ({ result, rank, scoreColor }) => {
   const [expanded, setExpanded] = useState(false);
 
+  const getRetrievalBadgeStyle = (method: string) => {
+    switch(method) {
+      case 'dense': return 'bg-purple-100 text-purple-700 border-purple-200';
+      case 'sparse': return 'bg-orange-100 text-orange-700 border-orange-200';
+      case 'hybrid': return 'bg-teal-100 text-teal-700 border-teal-200';
+      default: return 'bg-slate-100 text-slate-700 border-slate-200';
+    }
+  };
+
   return (
     <div 
       className={`bg-white border rounded-xl overflow-hidden transition-all duration-200 cursor-pointer hover:border-blue-300 hover:shadow-sm ${expanded ? 'border-blue-200 shadow-md ring-1 ring-blue-50' : 'border-slate-200'}`}
@@ -469,6 +467,18 @@ const ResultRow: React.FC<{ result: SearchResult, rank: number, scoreColor: stri
           </div>
           <span className="text-xs font-bold text-slate-700">{(result.score * 100).toFixed(0)}</span>
         </div>
+
+        {/* Retrieval Method Badge (Collapsed) */}
+        <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider border shrink-0 ${getRetrievalBadgeStyle(result.retrievalMethod)}`}>
+            {result.retrievalMethod}
+        </span>
+        
+        {/* Model Badge (Collapsed) */}
+        {result.embeddingModel && (
+          <span className="hidden sm:inline-block px-2 py-0.5 bg-slate-100 text-slate-500 text-[9px] font-bold rounded border border-slate-200 shrink-0 truncate max-w-[120px]" title={result.embeddingModel}>
+            {result.embeddingModel.split('/').pop()}
+          </span>
+        )}
 
         {/* Truncated Text */}
         <p className={`text-sm text-slate-700 font-serif italic truncate flex-1 ${expanded ? 'hidden' : 'block'}`}>
@@ -495,6 +505,22 @@ const ResultRow: React.FC<{ result: SearchResult, rank: number, scoreColor: stri
           </p>
           
           <div className="flex flex-wrap gap-4 text-xs text-slate-500">
+             <div className="flex items-center gap-2">
+               <span className="font-bold text-slate-400 uppercase tracking-wider">Retrieval:</span>
+               <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${getRetrievalBadgeStyle(result.retrievalMethod)}`}>
+                 {result.retrievalMethod} Match
+               </span>
+             </div>
+             
+             {result.embeddingModel && (
+               <div className="flex items-center gap-2">
+                 <span className="font-bold text-slate-400 uppercase tracking-wider">Model:</span>
+                 <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-[10px] font-bold border border-slate-200">
+                   {result.embeddingModel}
+                 </span>
+               </div>
+             )}
+
             <div className="flex items-center gap-2">
               <Icons.Database />
               <span className="font-semibold text-slate-700">{result.collectionName}</span>
