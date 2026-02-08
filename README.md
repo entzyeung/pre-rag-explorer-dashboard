@@ -13,6 +13,22 @@ A comprehensive Pre-RAG prototype dashboard for document parsing, multi-method c
 
 ---
 
+## Screenshots
+
+<!-- TODO: Replace placeholders with actual screenshots saved in docs/images/ -->
+
+| Upload Documents | Process & Chunk |
+|:---:|:---:|
+| ![Upload](docs/images/01-upload.png) | ![Process](docs/images/02-process.png) |
+| *Drag-and-drop file upload with multi-format support* | *5 chunking strategies with configurable parameters* |
+
+| Search & Explore | Collections Manager |
+|:---:|:---:|
+| ![Search](docs/images/03-search.png) | ![Collections](docs/images/04-collections.png) |
+| *Hybrid search with dense, sparse & combined retrieval* | *Manage vector collections and experiment history* |
+
+---
+
 ## Quick Start
 
 **Prerequisites:** Node.js (v18+)
@@ -20,10 +36,6 @@ A comprehensive Pre-RAG prototype dashboard for document parsing, multi-method c
 ```bash
 # Install dependencies
 npm install
-
-# Set up environment
-# Create .env.local and add your GEMINI_API_KEY (optional)
-cp .env.local.example .env.local
 
 # Run the app
 npm run dev
@@ -194,14 +206,13 @@ npm preview
 
 ## Environment Variables
 
-Create `.env.local` in the project root:
+Create a `.env.local` file in the project root:
 
 ```bash
-# Optional: For future Gemini API integration
 GEMINI_API_KEY=your_api_key_here
 ```
 
-Currently, the app uses in-browser embeddings and doesn't require API keys.
+> **Note**: The app primarily uses in-browser embeddings (Xenova/all-MiniLM-L6-v2) and does not require an API key for core functionality.
 
 ---
 
@@ -246,18 +257,12 @@ Currently, the app uses in-browser embeddings and doesn't require API keys.
 
 ---
 
-## License
-
-MIT License - see [LICENSE](LICENSE) file for details
-
----
-
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
 ---
 
-<div align="center">
-Made with ❤️ for RAG experimentation
-</div>
+## License
+
+MIT
