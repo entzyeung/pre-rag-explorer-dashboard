@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { VectorCollection, SearchResult, ChunkingMethod, ChunkParams } from '../../types';
 import { generateQueryEmbedding } from '../../services/embeddingService';
 import { cosineSimilarity, computeBM25 } from '../../utils/similarity';
@@ -12,6 +12,8 @@ interface SearchSectionProps {
   collections: VectorCollection[];
   loading: boolean;
 }
+
+// --- Sub-Components ---
 
 const ResultRow: React.FC<{ result: SearchResult, rank: number, scoreColor: string }> = ({ result, rank, scoreColor }) => {
   const [expanded, setExpanded] = useState(false);
@@ -42,24 +44,24 @@ const ResultRow: React.FC<{ result: SearchResult, rank: number, scoreColor: stri
           <span className="text-xs font-bold text-slate-700">{(result.score * 100).toFixed(0)}</span>
         </div>
 
-        {/* Retrieval Method Badge (Collapsed) */}
-        <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider border shrink-0 ${getRetrievalBadgeStyle(result.retrievalMethod)}`}>
-            {result.retrievalMethod}
-        </span>
-        
-        {/* Model Badge (Collapsed) */}
+        {/* Model Badge (Collapsed) - Moved First */}
         {result.embeddingModel && (
           <span className="hidden sm:inline-block px-2 py-0.5 bg-slate-100 text-slate-500 text-[9px] font-bold rounded border border-slate-200 shrink-0 truncate max-w-[120px]" title={result.embeddingModel}>
             {result.embeddingModel.split('/').pop()}
           </span>
         )}
 
+        {/* Retrieval Method Badge (Collapsed) */}
+        <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider border shrink-0 ${getRetrievalBadgeStyle(result.retrievalMethod)}`}>
+            {result.retrievalMethod}
+        </span>
+        
         {/* Truncated Text */}
         <p className={`text-sm text-slate-700 font-serif italic truncate flex-1 ${expanded ? 'hidden' : 'block'}`}>
           "{result.chunk.text}"
         </p>
         
-        {/* Metadata badges (Collapsed) - Source removed as requested */}
+        {/* Metadata badges (Collapsed) */}
         <div className={`flex items-center gap-2 ${expanded ? 'hidden' : 'flex'}`}>
            <span className="px-1.5 py-0.5 bg-slate-100 rounded text-[9px] font-bold text-slate-500 uppercase">
              {CHUNKING_METHOD_LABELS[result.chunk.chunkMethod].split(' ')[0]}
@@ -76,13 +78,8 @@ const ResultRow: React.FC<{ result: SearchResult, rank: number, scoreColor: stri
           </p>
           
           <div className="flex flex-wrap gap-4 text-xs text-slate-500">
-             <div className="flex items-center gap-2">
-               <span className="font-bold text-slate-400 uppercase tracking-wider">Retrieval Method:</span>
-               <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${getRetrievalBadgeStyle(result.retrievalMethod)}`}>
-                 {result.retrievalMethod} Match
-               </span>
-             </div>
              
+             {/* Model First */}
              {result.embeddingModel && (
                <div className="flex items-center gap-2">
                  <span className="font-bold text-slate-400 uppercase tracking-wider">Model:</span>
@@ -91,6 +88,13 @@ const ResultRow: React.FC<{ result: SearchResult, rank: number, scoreColor: stri
                  </span>
                </div>
              )}
+
+             <div className="flex items-center gap-2">
+               <span className="font-bold text-slate-400 uppercase tracking-wider">Retrieval Method:</span>
+               <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${getRetrievalBadgeStyle(result.retrievalMethod)}`}>
+                 {result.retrievalMethod} Match
+               </span>
+             </div>
 
             <div className="flex items-center gap-2">
               <span className="font-bold text-slate-400 uppercase tracking-wider">Collection:</span>
@@ -114,9 +118,225 @@ const ResultRow: React.FC<{ result: SearchResult, rank: number, scoreColor: stri
   );
 };
 
+// --- Hyperparameters View Component ---
+
+interface DocStat {
+  bestScore: number;
+  bestMethod: string;
+  bestChunking: string;
+  bestModel: string;
+}
+
+const HyperparametersView: React.FC<{ results: SearchResult[] }> = ({ results }) => {
+  const analysis = useMemo(() => {
+    if (!results.length) return null;
+
+    // Configuration Analysis (Chunking + Retrieval + Model)
+    const configMap = new Map<string, {
+      chunkMethod: string;
+      retrievalMethod: string;
+      embeddingModel: string;
+      maxScore: number;
+      avgScore: number;
+      scores: number[];
+    }>();
+
+    // Document Analysis
+    const docStats: Record<string, DocStat> = {};
+
+    results.forEach(r => {
+      // 1. Config Aggregation
+      const sig = `${r.chunk.chunkMethod}|${r.retrievalMethod}|${r.embeddingModel}`;
+      if (!configMap.has(sig)) {
+        configMap.set(sig, {
+          chunkMethod: r.chunk.chunkMethod,
+          retrievalMethod: r.retrievalMethod,
+          embeddingModel: r.embeddingModel || 'Unknown',
+          maxScore: 0,
+          avgScore: 0,
+          scores: []
+        });
+      }
+      const conf = configMap.get(sig)!;
+      conf.scores.push(r.score);
+      conf.maxScore = Math.max(conf.maxScore, r.score);
+
+      // 2. Doc Aggregation
+      const doc = r.chunk.sourceFileName;
+      if (!docStats[doc] || r.score > docStats[doc].bestScore) {
+          docStats[doc] = {
+              bestScore: r.score,
+              bestMethod: r.retrievalMethod,
+              bestChunking: r.chunk.chunkMethod,
+              bestModel: r.embeddingModel || 'Unknown'
+          };
+      }
+    });
+
+    const topConfigs = Array.from(configMap.values())
+      .map(c => ({
+        ...c,
+        avgScore: c.scores.reduce((a, b) => a + b, 0) / c.scores.length
+      }))
+      .sort((a, b) => b.maxScore - a.maxScore) // Sort by Max Score
+      .slice(0, 3);
+
+    return { topConfigs, docStats };
+  }, [results]);
+
+  if (!analysis) return null;
+
+  const { topConfigs, docStats } = analysis;
+
+  return (
+    <div className="space-y-10 animate-in fade-in slide-in-from-right-4 duration-500">
+      
+      {/* SECTION 1: OVERALL CORPUS */}
+      <section>
+        <div className="flex items-center gap-3 mb-6">
+           <div className="h-8 w-1 bg-indigo-600 rounded-full"></div>
+           <div>
+             <h3 className="text-lg font-bold text-slate-900">Overall Corpus Performance</h3>
+             <p className="text-xs text-slate-500">Top 3 parameter configurations that yielded the highest relevance scores across the entire result set.</p>
+           </div>
+        </div>
+
+        {/* Overall Best Card */}
+        {topConfigs.length > 0 && (
+          <div className="mb-6 bg-indigo-900 rounded-2xl p-6 text-white shadow-xl relative overflow-hidden group">
+             <div className="absolute top-0 right-0 p-12 bg-indigo-500/20 rounded-full blur-2xl group-hover:bg-indigo-400/30 transition-all duration-700"></div>
+             <div className="relative z-10">
+                <span className="inline-block px-3 py-1 rounded-full bg-indigo-500/30 border border-indigo-400/30 text-[10px] font-bold uppercase tracking-widest mb-4 backdrop-blur-sm">
+                   🏆 Best Overall Parameters
+                </span>
+                <div className="flex flex-col md:flex-row gap-8 items-start md:items-end justify-between">
+                   <div className="space-y-4 flex-1">
+                      {/* Model First */}
+                      <div>
+                        <p className="text-xs text-indigo-300 font-bold uppercase mb-1">Winning Model</p>
+                        <p className="text-lg font-bold break-all">{topConfigs[0].embeddingModel.split('/').pop()}</p>
+                      </div>
+                      <div className="flex gap-8">
+                         <div>
+                            <p className="text-xs text-indigo-300 font-bold uppercase mb-1">Chunking</p>
+                            <p className="text-lg font-semibold capitalize">{CHUNKING_METHOD_LABELS[topConfigs[0].chunkMethod as ChunkingMethod]?.split(' ')[0]}</p>
+                         </div>
+                         <div>
+                            <p className="text-xs text-indigo-300 font-bold uppercase mb-1">Retrieval</p>
+                            <p className="text-lg font-semibold capitalize">{topConfigs[0].retrievalMethod}</p>
+                         </div>
+                      </div>
+                   </div>
+                   <div className="text-right">
+                      <p className="text-[10px] text-indigo-300 font-bold uppercase mb-1">Relevance Score</p>
+                      <p className="text-5xl font-black tracking-tight text-white">{(topConfigs[0].maxScore * 100).toFixed(0)}<span className="text-2xl text-indigo-400">%</span></p>
+                   </div>
+                </div>
+             </div>
+          </div>
+        )}
+
+        {/* Top 3 List */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+           {topConfigs.map((config, idx) => (
+             <div key={idx} className={`bg-white border rounded-xl p-5 shadow-sm relative overflow-hidden ${idx === 0 ? 'border-indigo-200 ring-1 ring-indigo-50' : 'border-slate-200'}`}>
+                {idx === 0 && <div className="absolute top-0 right-0 bg-indigo-600 text-white text-[9px] font-black px-2 py-1 rounded-bl-lg uppercase">Rank #1</div>}
+                {idx === 1 && <div className="absolute top-0 right-0 bg-slate-400 text-white text-[9px] font-black px-2 py-1 rounded-bl-lg uppercase">Rank #2</div>}
+                {idx === 2 && <div className="absolute top-0 right-0 bg-amber-600 text-white text-[9px] font-black px-2 py-1 rounded-bl-lg uppercase">Rank #3</div>}
+                
+                <div className="flex items-baseline gap-2 mb-3">
+                  <span className={`text-3xl font-black ${idx === 0 ? 'text-indigo-600' : 'text-slate-700'}`}>{(config.maxScore * 100).toFixed(0)}</span>
+                  <span className="text-xs text-slate-400 font-bold uppercase">Max Score</span>
+                </div>
+                
+                <div className="space-y-2 text-sm">
+                   {/* Model First */}
+                   <div className="pt-0 pb-2 border-b border-slate-50 mb-2">
+                      <span className="block text-[10px] text-slate-400 uppercase font-bold mb-1">Embedding Model</span>
+                      <code className="text-[10px] bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100 block truncate" title={config.embeddingModel}>
+                        {config.embeddingModel.split('/').pop()}
+                      </code>
+                   </div>
+                   <div className="flex justify-between border-b border-slate-50 pb-2">
+                     <span className="text-slate-500 text-xs">Chunking</span>
+                     <span className="font-bold text-slate-800 capitalize">{CHUNKING_METHOD_LABELS[config.chunkMethod as ChunkingMethod]?.split(' ')[0]}</span>
+                   </div>
+                   <div className="flex justify-between pt-1">
+                     <span className="text-slate-500 text-xs">Retrieval</span>
+                     <span className="font-bold text-slate-800 capitalize">{config.retrievalMethod}</span>
+                   </div>
+                </div>
+             </div>
+           ))}
+        </div>
+      </section>
+
+      {/* SECTION 2: DOCUMENT OPTIMIZATION */}
+      <section>
+        <div className="flex items-center gap-3 mb-6">
+           <div className="h-8 w-1 bg-slate-900 rounded-full"></div>
+           <div>
+             <h3 className="text-lg font-bold text-slate-900">Optimization by Document</h3>
+             <p className="text-xs text-slate-500">Breakdown of the best performing parameters for each individual document found in results.</p>
+           </div>
+        </div>
+
+        <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead className="bg-slate-50 border-b border-slate-100">
+                <tr>
+                  <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-wider">Document Name</th>
+                  <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-wider text-center">Best Score</th>
+                  {/* Model First */}
+                  <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-wider">Embedding Model</th>
+                  <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-wider">Winning Chunk Method</th>
+                  <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-wider">Winning Retrieval</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {Object.entries(docStats).map(([docName, stats]: [string, DocStat]) => (
+                  <tr key={docName} className="hover:bg-slate-50 transition-colors">
+                    <td className="px-6 py-4 text-sm font-bold text-slate-700 truncate max-w-[200px]" title={docName}>{docName}</td>
+                    <td className="px-6 py-4 text-center">
+                      <span className={`px-2 py-1 rounded text-xs font-bold ${stats.bestScore > 0.7 ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-700'}`}>
+                        {(stats.bestScore * 100).toFixed(0)}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                       <span className="text-[10px] font-mono text-slate-500 truncate block max-w-[150px]" title={stats.bestModel}>
+                          {stats.bestModel.split('/').pop()}
+                       </span>
+                    </td>
+                    <td className="px-6 py-4">
+                       <span className="text-xs font-medium text-slate-600 capitalize bg-white border border-slate-200 px-2 py-1 rounded shadow-sm">
+                          {CHUNKING_METHOD_LABELS[stats.bestChunking as ChunkingMethod]?.split(' ')[0]}
+                       </span>
+                    </td>
+                    <td className="px-6 py-4">
+                       <span className="text-xs font-medium text-slate-600 capitalize bg-white border border-slate-200 px-2 py-1 rounded shadow-sm">
+                          {stats.bestMethod}
+                       </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+};
+
+// --- Main Search Section Component ---
+
 const SearchSection: React.FC<SearchSectionProps> = ({ collections, loading: appLoading }) => {
   const [query, setQuery] = useState('');
   const [selectedCollections, setSelectedCollections] = useState<string[]>([]);
+  
+  // Tab State - Default to 'hyperparams' as requested
+  const [activeTab, setActiveTab] = useState<'results' | 'hyperparams'>('hyperparams');
   
   // Persisted State: Retrieval Methods
   const [retrievalMethods, setRetrievalMethods] = useState<('dense' | 'sparse' | 'hybrid')[]>(() => {
@@ -137,6 +357,8 @@ const SearchSection: React.FC<SearchSectionProps> = ({ collections, loading: app
   // Question Sets
   const [personas, setPersonas] = useState<Persona[]>(SAMPLE_PERSONAS);
   const [selectedPersonaId, setSelectedPersonaId] = useState<string>('');
+  const [showSampleQuestions, setShowSampleQuestions] = useState(true);
+  
   const activePersona = personas.find(p => p.id === selectedPersonaId);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -161,6 +383,9 @@ const SearchSection: React.FC<SearchSectionProps> = ({ collections, loading: app
     if (selectedCollections.length === 0) return alert("Select at least one collection.");
     
     setSearching(true);
+    // Note: We keep the active tab as is (user preference), or can force it:
+    // setActiveTab('hyperparams'); 
+    
     const startTime = performance.now();
     const allResults: SearchResult[] = [];
 
@@ -249,8 +474,6 @@ const SearchSection: React.FC<SearchSectionProps> = ({ collections, loading: app
         try {
           const json = JSON.parse(text);
           if (Array.isArray(json)) {
-             // Basic structure check - assume array of {category, question} or just raw questions
-             // Transform into a new Persona
              const newQuestions: Question[] = json.map((q: any) => ({
                 text: q.question || q.text || String(q),
                 focus: q.category || q.focus || 'Custom'
@@ -401,14 +624,23 @@ const SearchSection: React.FC<SearchSectionProps> = ({ collections, loading: app
         <div className="lg:col-span-3 space-y-6">
           
           {/* Persona/Question Selection */}
-          <div className="bg-gradient-to-r from-slate-50 to-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-            <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between mb-4">
-              <div>
+          <div className="bg-gradient-to-r from-slate-50 to-white border border-slate-200 rounded-2xl p-5 shadow-sm transition-all duration-200">
+            <div className={`flex flex-col md:flex-row gap-4 items-start md:items-center justify-between ${showSampleQuestions ? 'mb-4' : ''}`}>
+              <div 
+                className="flex items-center gap-2 cursor-pointer group select-none"
+                onClick={() => setShowSampleQuestions(!showSampleQuestions)}
+              >
                 <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                   <span className="w-5 h-5 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center text-xs">?</span>
                   Sample Questions
                 </h3>
+                <div className={`text-slate-400 group-hover:text-indigo-600 transition-transform duration-200 ${showSampleQuestions ? 'rotate-180' : ''}`}>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </div>
               </div>
+
               <div className="flex gap-2 w-full md:w-auto">
                 <select 
                   value={selectedPersonaId}
@@ -437,7 +669,7 @@ const SearchSection: React.FC<SearchSectionProps> = ({ collections, loading: app
               </div>
             </div>
             
-            {activePersona && (
+            {showSampleQuestions && activePersona && (
               <div className="animate-in fade-in slide-in-from-top-2 duration-300">
                 <div className="bg-indigo-50/50 p-3 rounded-xl mb-3 border border-indigo-100/50">
                    <p className="text-xs text-indigo-800 italic">{activePersona.description}</p>
@@ -481,42 +713,51 @@ const SearchSection: React.FC<SearchSectionProps> = ({ collections, loading: app
             </button>
           </div>
 
-          {/* Search Results Display */}
+          {/* Search Results / Tabs */}
           <div className="space-y-6">
             {results.length > 0 && (
-              <div className="flex items-center justify-between px-2 py-3 bg-slate-100 rounded-xl border border-slate-200 sticky top-0 z-10 shadow-sm">
-                <div className="flex items-center gap-4">
-                  <div className="px-3 py-1 bg-white rounded-lg border border-slate-200 shadow-sm">
-                    <span className="text-[10px] uppercase font-black text-slate-400 block">Results</span>
-                    <span className="text-lg font-bold text-slate-900 leading-none">{results.length}</span>
-                  </div>
-                  <div className="px-3 py-1 bg-white rounded-lg border border-slate-200 shadow-sm">
-                    <span className="text-[10px] uppercase font-black text-slate-400 block">Latency</span>
-                    <span className="text-lg font-bold text-slate-900 leading-none">{searchTime.toFixed(0)}<span className="text-xs font-medium text-slate-400">ms</span></span>
-                  </div>
-                </div>
-                <div className="text-right hidden sm:block">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Active Filters</span>
-                  <div className="flex gap-2 mt-1">
-                    {retrievalMethods.map(m => (
-                      <span key={m} className="px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded text-[10px] font-bold uppercase">{m}</span>
-                    ))}
-                    <span className="px-2 py-0.5 bg-slate-200 text-slate-600 rounded text-[10px] font-bold uppercase">Top {topK}</span>
-                  </div>
+              <div className="bg-slate-100 rounded-xl border border-slate-200 p-1 sticky top-0 z-10 shadow-sm">
+                <div className="flex justify-between items-center">
+                   <div className="flex gap-1">
+                     <button 
+                       onClick={() => setActiveTab('hyperparams')}
+                       className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${activeTab === 'hyperparams' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                     >
+                       Hyperparameters
+                     </button>
+                     <button 
+                       onClick={() => setActiveTab('results')}
+                       className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${activeTab === 'results' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                     >
+                       Detailed Results
+                     </button>
+                   </div>
+                   
+                   <div className="flex items-center gap-4 px-2">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider hidden sm:inline">
+                         {results.length} Matches in {searchTime.toFixed(0)}ms
+                      </span>
+                   </div>
                 </div>
               </div>
             )}
 
-            <div className="space-y-2">
-                 {results.map((res, i) => (
-                   <ResultRow 
-                    key={`${res.collectionId}-${res.chunk.id}-${res.retrievalMethod}-${i}`} 
-                    result={res} 
-                    rank={i+1} 
-                    scoreColor={getScoreColor(res.score)} 
-                   />
-                 ))}
-            </div>
+            {activeTab === 'results' && (
+              <div className="space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                   {results.map((res, i) => (
+                     <ResultRow 
+                      key={`${res.collectionId}-${res.chunk.id}-${res.retrievalMethod}-${i}`} 
+                      result={res} 
+                      rank={i+1} 
+                      scoreColor={getScoreColor(res.score)} 
+                     />
+                   ))}
+              </div>
+            )}
+
+            {activeTab === 'hyperparams' && (
+               <HyperparametersView results={results} />
+            )}
 
             {results.length === 0 && !searching && query && (
               <div className="text-center py-16 bg-white rounded-2xl border border-slate-100 shadow-sm">

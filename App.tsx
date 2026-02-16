@@ -7,7 +7,7 @@ import { chunkText } from './services/chunkingService';
 import { generateEmbeddings, generateQueryEmbedding } from './services/embeddingService';
 import { 
   saveCollection, getAllCollections, deleteCollection, clearAllCollections,
-  saveFile, getAllFiles, deleteFile 
+  saveFile, getAllFiles, deleteFile, clearAllFiles
 } from './services/vectorStore';
 import { cosineSimilarity, computeBM25 } from './utils/similarity';
 
@@ -113,9 +113,7 @@ const App: React.FC = () => {
   const handleClearFiles = async () => {
     if (confirm("Are you sure you want to remove all uploaded files? This cannot be undone.")) {
       try {
-        // We must delete them one by one or clear the store. 
-        // For safety/simplicity in this context, we iterate the current state IDs.
-        await Promise.all(state.files.map(f => deleteFile(f.id)));
+        await clearAllFiles();
         setState(prev => ({ ...prev, files: [] }));
       } catch (err) {
         console.error("Failed to clear all files", err);

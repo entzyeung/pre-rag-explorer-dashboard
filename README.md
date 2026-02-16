@@ -11,17 +11,20 @@ A comprehensive Pre-RAG prototype dashboard for document parsing, multi-method c
 
 ## Screenshots
 
-<!-- TODO: Replace placeholders with actual screenshots saved in docs/images/ -->
-
 | Upload Documents | Process & Chunk |
 |:---:|:---:|
 | ![Upload](docs/images/01-upload.jpg) | ![Process](docs/images/02-process.jpg) |
 | *Drag-and-drop file upload with multi-format support* | *5 chunking strategies with configurable parameters* |
 
-| Search & Explore | Collections Manager |
+| Search Interface | Search Results |
 |:---:|:---:|
-| ![Search](docs/images/03-search.jpg) | ![Collections](docs/images/04-collections.jpg) |
-| *Hybrid search with dense, sparse & combined retrieval* | *Manage vector collections and experiment history* |
+| ![Search Interface](docs/images/03-search-01.jpg) | ![Search Results](docs/images/03-search-02.jpg) |
+| *Natural language query with retrieval method selection* | *Ranked results with similarity scores* |
+
+| Collections Manager |
+|:---:|
+| ![Collections](docs/images/04-collections.jpg) |
+| *Manage vector collections and experiment history* |
 
 ---
 

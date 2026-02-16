@@ -1,4 +1,3 @@
-
 {
   "name": "Pre-RAG Explorer Dashboard",
   "description": "A comprehensive Pre-RAG prototype dashboard for document parsing, multi-method chunking, vector embedding generation using Gemini, and hybrid search exploration.",

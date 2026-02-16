@@ -105,3 +105,14 @@ export async function deleteFile(id: string): Promise<void> {
     request.onerror = () => reject(request.error);
   });
 }
+
+export async function clearAllFiles(): Promise<void> {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(FILE_STORE, 'readwrite');
+    const store = transaction.objectStore(FILE_STORE);
+    const request = store.clear();
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+}
