@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { UploadedFile, ChunkingMethod, ChunkParams, ProcessingStatus } from '../../types';
-import { CHUNKING_METHOD_LABELS, Icons } from '../../constants';
+import { CHUNKING_METHOD_LABELS, Icons, GEMINI_MODEL } from '../../constants';
 import ErrorDisplay from '../layout/ErrorDisplay';
 import CopyButton from '../common/CopyButton';
 
@@ -83,6 +83,32 @@ const ProcessSection: React.FC<ProcessSectionProps> = ({ files, onProcess, loadi
         <h2 className="text-3xl font-bold text-slate-900 mb-2">Chunk & Vectorize</h2>
         <p className="text-slate-500">Transform your raw text into searchable vectors. Choose your Chunking Method wisely—it affects context retrieval.</p>
       </header>
+      
+      {/* Embedding Model Information Block */}
+      <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 flex items-start gap-4">
+        <div className="p-2.5 bg-white rounded-lg shadow-sm text-indigo-600 shrink-0">
+          <Icons.Database />
+        </div>
+        <div>
+           <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-1">
+             <h4 className="text-sm font-bold text-indigo-900">Active Embedding Model:</h4>
+             <div className="flex items-center gap-2">
+                <code className="px-2 py-0.5 bg-white border border-indigo-200 rounded text-xs font-mono text-indigo-700 font-bold shadow-sm">
+                  {GEMINI_MODEL}
+                </code>
+                <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-600 text-[10px] font-bold rounded uppercase tracking-wider">
+                  384 Dimensions
+                </span>
+             </div>
+           </div>
+           <p className="text-xs text-indigo-600/80 font-medium leading-relaxed">
+             This model runs 100% locally in your browser using WebAssembly.
+             <span className="block mt-1 text-indigo-500 italic text-[11px]">
+               * Note: Support for remote models (OpenAI, Gemini, Cohere) will be available in future updates.
+             </span>
+           </p>
+        </div>
+      </div>
 
       {processingStatus.length > 0 ? (
         <div className="space-y-4">

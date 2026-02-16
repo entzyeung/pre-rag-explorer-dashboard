@@ -82,8 +82,12 @@ const CollectionsManager: React.FC<CollectionsManagerProps> = ({ collections, ex
                 <h3 className="font-bold text-slate-900 mb-1 truncate" title={col.name}>{col.name}</h3>
                 
                 <div className="grid grid-cols-2 gap-3 mt-4">
+                  <div className="bg-slate-50 p-2 rounded-lg col-span-2">
+                    <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">Embedding Model</p>
+                    <p className="text-xs font-bold text-slate-700 truncate">{col.embeddingModel || 'Unknown'}</p>
+                  </div>
                   <div className="bg-slate-50 p-2 rounded-lg">
-                    <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">Method</p>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase mb-0.5">Chunking</p>
                     <p className="text-xs font-bold text-slate-700 truncate">{CHUNKING_METHOD_LABELS[col.chunkMethod]}</p>
                   </div>
                   <div className="bg-slate-50 p-2 rounded-lg">
